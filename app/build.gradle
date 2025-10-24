@@ -38,7 +38,7 @@ android {
         minSdk 30
         targetSdk 34
         versionCode 1
-        versionName "1.0.1" // <-- GitHub 릴리스와 비교할 버전
+        versionName "1.0.2" // <-- GitHub 릴리스와 비교할 버전
         // ...
     }
 

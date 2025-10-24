@@ -430,10 +430,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     private void checkForUpdates() {
-        if (GITHUB_API_URL.contains("pjm6569")) {
-            Log.e(TAG, "GitHub API URL을 설정하세요. (MainActivity.java)");
-            return;
-        }
+//        if (GITHUB_API_URL.contains("")) {
+//            Log.e(TAG, "GitHub API URL을 설정하세요. (MainActivity.java)");
+//            return;
+//        }
         RequestQueue queue = Volley.newRequestQueue(this);
         JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(
                 Request.Method.GET, GITHUB_API_URL, null,

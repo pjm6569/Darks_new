@@ -10,15 +10,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
-        <!-- res/values/themes.xml에서 NoActionBar 테마를 사용해야 합니다. -->
-        <!-- Toolbar의 app:title이 @string/app_name ("Darks")을 참조합니다. -->
         <androidx.appcompat.widget.Toolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="?attr/colorPrimary"
             app:title="@string/app_name"
-            app:titleTextColor="@android:color/white"
+            app:titleTextColor="@color/text_primary_dark"
             app:layout_scrollFlags="scroll|enterAlways" />
 
     </com.google.android.material.appbar.AppBarLayout>
@@ -28,7 +26,14 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_behavior="@string/appbar_scrolling_view_behavior"
-        tools:listitem="@layout/list_item_bookmark" />
+        tools:listitem="@layout/list_item_bookmark"
+
+        android:paddingTop="8dp"
+        android:clipToPadding="false" /> <!-- [!!!] 주석을 태그 밖으로 이동시켰습니다 [!!!] -->
+    <!--
+        리스트 상단에 8dp 여백 추가
+        스크롤 시 여백을 자연스럽게 침범하도록 설정
+    -->
 
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fab_add_bookmark"
@@ -37,6 +42,8 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
         android:src="@drawable/ic_add"
+        app:tint="@color/text_primary_dark"
+        app:backgroundTint="?attr/colorPrimary"
         android:contentDescription="Add Bookmark"/>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

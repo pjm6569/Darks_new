@@ -9,7 +9,13 @@
         app:showAsAction="ifRoom|collapseActionView"
         app:actionViewClass="androidx.appcompat.widget.SearchView" />
 
-    <!-- [!!!] '설정' 메뉴 항목 추가 [!!!] -->
+    <!-- [!!!] '레이아웃 변경' 토글 아이콘 추가 [!!!] -->
+    <item
+        android:id="@+id/action_toggle_layout"
+        android:title="레이아웃 변경"
+        android:icon="@drawable/ic_view_grid"
+        app:showAsAction="ifRoom" />
+
     <item
         android:id="@+id/action_settings"
         android:title="설정"

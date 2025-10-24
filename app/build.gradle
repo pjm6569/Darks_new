@@ -2,15 +2,31 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+// properties 변수를 정의하고, local.properties 파일에서 내용을 로드합니다.
+// 이렇게 로드된 객체는 Map처럼 사용될 수 있습니다.
+def keyProps = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+
+if (localPropertiesFile.exists()) {
+    // 파일이 존재할 경우에만 로드
+    localPropertiesFile.withInputStream { keyProps.load(it) }
+} else {
+    // local.properties가 없을 경우 빌드 실패를 방지
+    println("WARNING: local.properties file not found.")
+}
+
+
 android {
+
+
     signingConfigs {
         release {
-            // 2. 로드한 변수를 사용합니다.
-            // local.properties에 해당 키가 없을 경우를 대비하여 || "기본값"을 넣어주는 것이 좋습니다.
-            storeFile file(properties.getProperty('RELEASE_STORE_FILE') ?: '')
-            storePassword properties.getProperty('RELEASE_STORE_PASSWORD') ?: ''
-            keyAlias properties.getProperty('RELEASE_KEY_ALIAS') ?: ''
-            keyPassword properties.getProperty('RELEASE_KEY_PASSWORD') ?: ''
+            // **오류 수정**: 'getProperty()' 대신 Map 접근 방식인 대괄호 '[' ']'를 사용합니다.
+            // 변수 이름도 'keyProps'로 변경했습니다.
+            storeFile file(keyProps['RELEASE_STORE_FILE'] ?: '')
+            storePassword keyProps['RELEASE_STORE_PASSWORD'] ?: ''
+            keyAlias keyProps['RELEASE_KEY_ALIAS'] ?: ''
+            keyPassword keyProps['RELEASE_KEY_PASSWORD'] ?: ''
         }
     }
     namespace 'com.jmpark.app.darks'
@@ -22,7 +38,7 @@ android {
         minSdk 30
         targetSdk 34
         versionCode 1
-        versionName "1.0.0" // <-- GitHub 릴리스와 비교할 버전
+        versionName "1.0.1" // <-- GitHub 릴리스와 비교할 버전
         // ...
     }
 
@@ -30,11 +46,24 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
+    }
+    applicationVariants.all{
+        variant ->
+            variant.outputs.each{
+                    // on below line we are setting a name to our apk
+                output->
+                    // 앱의 이름을 지정해줍니다.
+                    def appName = "Darks"
+                    // 파일생성 날짜를 이용하기 위한 처리.
+                    def newName = appName+'_'+defaultConfig.versionName+'.apk'
+                    output.outputFileName  = newName
+            }
     }
 }
 

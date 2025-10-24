@@ -1,13 +1,12 @@
 package com.jmpark.app.darks; // 사용자의 패키지 이름
 
 import android.content.Intent;
-// [!!!] SharedPreferences 임포트 [!!!]
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
-// [!!!] PreferenceManager 임포트 [!!!]
 import android.preference.PreferenceManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -23,9 +22,13 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
 import androidx.appcompat.widget.Toolbar;
+// [!!!] 임포트 추가 [!!!]
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
+// [!!!] 임포트 추가 [!!!]
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.volley.Request;
@@ -36,6 +39,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import org.json.JSONException;
 
+import java.util.ArrayList; // NPE 방지
 import java.util.Collections;
 import java.util.List;
 
@@ -47,15 +51,22 @@ public class MainActivity extends AppCompatActivity {
     private ItemTouchHelper itemTouchHelper;
     private Bookmark longClickedBookmark;
 
-    // --- 업데이트 확인용 ---
-    private static final String GITHUB_API_URL = "https://api.github.com/repos/pjm6569/Darks_new/releases/latest";
+    // !!! 본인의 GitHub 정보로 반드시 변경하세요 !!!
+    private static final String GITHUB_API_URL = "https://api.github.com/repos/{YOUR_GITHUB_USERNAME}/{YOUR_REPOSITORY_NAME}/releases/latest";
     private static final String TAG = "MainActivity_Update";
 
-    // [!!!] 설정 저장을 위한 SharedPreferences [!!!]
+    // --- 설정 저장을 위한 SharedPreferences ---
     public static final String PREF_CLICK_ACTION = "pref_click_action";
-    public static final String ACTION_SHARE = "SHARE"; // 공유하기
-    public static final String ACTION_CHOOSER = "CHOOSER"; // 브라우저 선택창
+    public static final String ACTION_SHARE = "SHARE";
+    public static final String ACTION_CHOOSER = "CHOOSER";
+
+    // [!!!] 레이아웃 모드 저장을 위한 키 [!!!]
+    public static final String PREF_LAYOUT_MODE = "pref_layout_mode";
+    public static final String LAYOUT_LIST = "LIST";
+    public static final String LAYOUT_GRID = "GRID";
+
     private SharedPreferences prefs;
+    private String currentLayoutMode; // 현재 레이아웃 모드 저장
 
 
     @Override
@@ -63,23 +74,28 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // [!!!] SharedPreferences 초기화 [!!!]
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
         recyclerView = findViewById(R.id.recycler_view);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        recyclerView.setHasFixedSize(true);
 
+        // 어댑터 설정 (LayoutManager 설정 전)
         adapter = new BookmarkAdapter();
         recyclerView.setAdapter(adapter);
 
-        bookmarkViewModel = new ViewModelProvider(this).get(BookmarkViewModel.class);
+        // [!!!] 저장된 레이아웃 모드 불러오기 (기본값: LIST) [!!!]
+        currentLayoutMode = prefs.getString(PREF_LAYOUT_MODE, LAYOUT_LIST);
+        // [!!!] RecyclerView 레이아웃 매니저 설정 [!!!]
+        setupLayoutManager();
 
+        bookmarkViewModel = new ViewModelProvider(this).get(BookmarkViewModel.class);
         bookmarkViewModel.getAllBookmarks().observe(this, bookmarks -> {
-            adapter.setBookmarks(bookmarks);
+            // NullPointerException 방지
+            if (bookmarks != null) {
+                adapter.setBookmarks(bookmarks);
+            }
         });
 
         FloatingActionButton fab = findViewById(R.id.fab_add_bookmark);
@@ -95,31 +111,67 @@ public class MainActivity extends AppCompatActivity {
         checkForUpdates();
     }
 
+    // [!!!] 현재 모드에 따라 LayoutManager를 설정하는 메서드 [!!!]
+    private void setupLayoutManager() {
+        if (currentLayoutMode.equals(LAYOUT_GRID)) {
+            // 격자 뷰 (2열)
+            recyclerView.setLayoutManager(new GridLayoutManager(this, 2));
+        } else {
+            // 일렬 리스트 뷰
+            recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        }
+    }
+
+
     // --- 드래그 앤 드롭 ---
     private void setupItemTouchHelper() {
         ItemTouchHelper.Callback callback = new ItemTouchHelper.SimpleCallback(
-                ItemTouchHelper.UP | ItemTouchHelper.DOWN, 0) { // 스와이프는 0 (사용 안 함)
+                // [!!!] 격자 뷰를 위해 좌우 드래그 추가 [!!!]
+                ItemTouchHelper.UP | ItemTouchHelper.DOWN | ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT,
+                0) { // 스와이프는 0 (사용 안 함)
 
             @Override
             public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
                 int fromPosition = viewHolder.getAdapterPosition();
                 int toPosition = target.getAdapterPosition();
+
+                // 데이터 유효성 검사
+                if (fromPosition == RecyclerView.NO_POSITION || toPosition == RecyclerView.NO_POSITION) {
+                    return false;
+                }
+
                 List<Bookmark> list = adapter.getList();
-                Collections.swap(list, fromPosition, toPosition);
+                // IndexOutOfBoundsException 방지
+                if (list == null || fromPosition < 0 || fromPosition >= list.size() || toPosition < 0 || toPosition >= list.size()) {
+                    return false;
+                }
+
+                // [!!!] 격자 뷰 드래그 수정 (Swap -> Remove/Add) [!!!]
+                // Collections.swap(list, fromPosition, toPosition); (X)
+                Bookmark item = list.remove(fromPosition); // 1. 아이템을 뺍니다.
+                list.add(toPosition, item); // 2. 원하는 위치에 삽입합니다. (나머지는 밀려남)
+
                 adapter.notifyItemMoved(fromPosition, toPosition);
                 return true;
             }
 
             @Override
-            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) { }
+            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+                // 스와이프 사용 안 함
+            }
 
             @Override
             public void clearView(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder) {
                 super.clearView(recyclerView, viewHolder);
                 // 드래그가 끝나면 순서 인덱스를 업데이트
                 List<Bookmark> updatedList = adapter.getList();
+                // NullPointerException 방지
+                if (updatedList == null) return;
+
                 for (int i = 0; i < updatedList.size(); i++) {
-                    updatedList.get(i).setOrderIndex(i);
+                    if (updatedList.get(i) != null) { // 리스트 내 null 객체 방지
+                        updatedList.get(i).setOrderIndex(i);
+                    }
                 }
                 bookmarkViewModel.updateAll(updatedList);
             }
@@ -215,8 +267,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            // [수정됨] URL 멈춤 방지를 위해 https 추가
-            url = ensureHttps(url);
+            url = ensureHttps(url); // https 보정
 
             if (bookmark == null) {
                 // 추가 (orderIndex는 ViewModel에서 자동 설정)
@@ -226,7 +277,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 // 수정
                 bookmark.setTitle(title);
-                bookmark.setUrl(url); // 수정된 URL 저장
+                bookmark.setUrl(url);
                 bookmarkViewModel.update(bookmark);
                 Toast.makeText(this, "수정되었습니다.", Toast.LENGTH_SHORT).show();
             }
@@ -235,15 +286,24 @@ public class MainActivity extends AppCompatActivity {
         builder.show();
     }
 
-    // --- 검색 메뉴 + [!!!] 설정 메뉴 핸들러 추가 [!!!] ---
+    // --- 메뉴 생성 및 핸들러 ---
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
+
+        // 검색창 설정
         MenuItem searchItem = menu.findItem(R.id.action_search);
         SearchView searchView = (SearchView) searchItem.getActionView();
-
         searchView.setQueryHint("제목 또는 URL 검색");
+        EditText searchEditText = searchView.findViewById(androidx.appcompat.R.id.search_src_text);
 
+        if (searchEditText != null) {
+            // 2. 검색어 입력 시 텍스트 색상 (흰색)
+            searchEditText.setTextColor(Color.WHITE);
+
+            // 3. 힌트 텍스트 색상 (흰색)
+            searchEditText.setHintTextColor(Color.WHITE);
+        }
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
             @Override
             public boolean onQueryTextSubmit(String query) {
@@ -252,9 +312,11 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public boolean onQueryTextChange(String newText) {
-                // 텍스트가 변경될 때마다 필터링된 리스트 관찰
+                // LiveData 관찰 로직 개선 (Null 체크)
                 bookmarkViewModel.getFilteredBookmarks(newText).observe(MainActivity.this, bookmarks -> {
-                    adapter.setBookmarks(bookmarks);
+                    if (bookmarks != null) {
+                        adapter.setBookmarks(bookmarks);
+                    }
                 });
                 return true;
             }
@@ -262,48 +324,91 @@ public class MainActivity extends AppCompatActivity {
 
         searchItem.setOnActionExpandListener(new MenuItem.OnActionExpandListener() {
             @Override
-            public boolean onMenuItemActionExpand(MenuItem item) { return true; }
+            public boolean onMenuItemActionExpand(MenuItem item) {
+                return true;
+            }
 
             @Override
             public boolean onMenuItemActionCollapse(MenuItem item) {
-                // 검색창이 닫힐 때 전체 리스트 관찰
                 bookmarkViewModel.getAllBookmarks().observe(MainActivity.this, bookmarks -> {
-                    adapter.setBookmarks(bookmarks);
+                    if (bookmarks != null) {
+                        adapter.setBookmarks(bookmarks);
+                    }
                 });
                 return true;
             }
         });
+
+        // [!!!] 레이아웃 토글 아이콘 설정 [!!!]
+        // onCreateOptionsMenu는 메뉴가 처음 생성될 때, 그리고 invalidateOptionsMenu() 호출 시 다시 실행됩니다.
+        MenuItem toggleItem = menu.findItem(R.id.action_toggle_layout);
+        if (currentLayoutMode.equals(LAYOUT_GRID)) {
+            // 현재 격자 -> '리스트' 아이콘 표시
+            toggleItem.setIcon(ContextCompat.getDrawable(this, R.drawable.ic_view_list));
+            toggleItem.setTitle("리스트 뷰로 보기"); // 접근성 향상
+        } else {
+            // 현재 리스트 -> '격자' 아이콘 표시
+            toggleItem.setIcon(ContextCompat.getDrawable(this, R.drawable.ic_view_grid));
+            toggleItem.setTitle("격자 뷰로 보기"); // 접근성 향상
+        }
+
         return true;
     }
 
-    // [!!!] '설정' 메뉴 항목 클릭 시 호출 [!!!]
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         int id = item.getItemId();
+
         if (id == R.id.action_settings) {
+            // 설정 클릭
             showSettingsDialog();
             return true;
+        } else if (id == R.id.action_toggle_layout) {
+            // [!!!] 레이아웃 토글 클릭 [!!!]
+            toggleLayoutMode();
+            return true;
         }
+
         return super.onOptionsItemSelected(item);
     }
 
-    // [!!!] 설정 다이얼로그 표시 메서드 [!!!]
-    private void showSettingsDialog() {
-        String[] items = {"공유하기 창 (선택 가능)", "브라우저 선택창(기본 앱 사용)"};
+    // [!!!] 레이아웃 모드 변경 메서드 [!!!]
+    private void toggleLayoutMode() {
+        SharedPreferences.Editor editor = prefs.edit();
 
-        // 현재 설정된 값(기본값: SHARE)을 읽어옵니다.
+        if (currentLayoutMode.equals(LAYOUT_GRID)) {
+            // 격자 -> 리스트로 변경
+            currentLayoutMode = LAYOUT_LIST;
+            editor.putString(PREF_LAYOUT_MODE, LAYOUT_LIST);
+        } else {
+            // 리스트 -> 격자로 변경
+            currentLayoutMode = LAYOUT_GRID;
+            editor.putString(PREF_LAYOUT_MODE, LAYOUT_GRID);
+        }
+
+        editor.apply();
+
+        // 1. RecyclerView의 레이아웃 매니저 교체
+        setupLayoutManager();
+        // 2. 툴바의 아이콘을 갱신 (onCreateOptionsMenu를 다시 호출)
+        invalidateOptionsMenu();
+    }
+
+
+    // --- 설정 다이얼로그 ---
+    private void showSettingsDialog() {
+        String[] items = {"공유하기 창 (안정적)", "브라우저 선택창 (실험적)"};
         String currentAction = prefs.getString(PREF_CLICK_ACTION, ACTION_SHARE);
         int checkedItem = currentAction.equals(ACTION_CHOOSER) ? 1 : 0;
 
         new AlertDialog.Builder(this)
                 .setTitle("클릭 시 동작 설정")
                 .setSingleChoiceItems(items, checkedItem, (dialog, which) -> {
-                    // 사용자가 선택한 항목을 SharedPreferences에 저장
                     SharedPreferences.Editor editor = prefs.edit();
-                    if (which == 1) { // 1번: 브라우저 선택창
+                    if (which == 1) {
                         editor.putString(PREF_CLICK_ACTION, ACTION_CHOOSER);
                         Toast.makeText(this, "브라우저 선택창으로 설정 (기기에서 작동하지 않을 수 있음)", Toast.LENGTH_LONG).show();
-                    } else { // 0번: 공유하기
+                    } else {
                         editor.putString(PREF_CLICK_ACTION, ACTION_SHARE);
                         Toast.makeText(this, "공유하기 창으로 설정", Toast.LENGTH_SHORT).show();
                     }
@@ -314,9 +419,7 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-
     // --- GitHub 업데이트 확인 로직 ---
-
     private String getCurrentVersionName() {
         try {
             PackageInfo pInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -326,26 +429,21 @@ public class MainActivity extends AppCompatActivity {
             return null;
         }
     }
-
     private void checkForUpdates() {
-        if (GITHUB_API_URL.contains("pjm6569")) {
+        if (GITHUB_API_URL.contains("{YOUR_GITHUB_USERNAME}")) {
             Log.e(TAG, "GitHub API URL을 설정하세요. (MainActivity.java)");
             return;
         }
-
         RequestQueue queue = Volley.newRequestQueue(this);
         JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(
                 Request.Method.GET, GITHUB_API_URL, null,
                 response -> {
                     try {
-                        String latestTag = response.getString("tag_name"); // 예: "v1.1.0"
+                        String latestTag = response.getString("tag_name");
                         String releasePageUrl = response.getString("html_url");
                         String latestVersion = latestTag.replace("v", "").trim();
                         String currentVersion = getCurrentVersionName();
-
                         Log.d(TAG, "Current Version: " + currentVersion + ", Latest Version: " + latestVersion);
-
-                        // 버전 이름이 다르면 업데이트 다이얼로그 표시
                         if (currentVersion != null && !currentVersion.equals(latestVersion)) {
                             showUpdateDialog(latestVersion, releasePageUrl);
                         }
@@ -357,7 +455,6 @@ public class MainActivity extends AppCompatActivity {
         );
         queue.add(jsonObjectRequest);
     }
-
     private void showUpdateDialog(String newVersion, String releaseUrl) {
         new AlertDialog.Builder(this)
                 .setTitle("새 버전 알림 (Darks)")

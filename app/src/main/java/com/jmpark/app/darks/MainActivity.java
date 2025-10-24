@@ -52,7 +52,7 @@ public class MainActivity extends AppCompatActivity {
     private Bookmark longClickedBookmark;
 
     // !!! 본인의 GitHub 정보로 반드시 변경하세요 !!!
-    private static final String GITHUB_API_URL = "https://api.github.com/repos/{YOUR_GITHUB_USERNAME}/{YOUR_REPOSITORY_NAME}/releases/latest";
+    private static final String GITHUB_API_URL = "https://api.github.com/repos/pjm6569/Darks_new/releases/latest";
     private static final String TAG = "MainActivity_Update";
 
     // --- 설정 저장을 위한 SharedPreferences ---
@@ -430,7 +430,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
     private void checkForUpdates() {
-        if (GITHUB_API_URL.contains("{YOUR_GITHUB_USERNAME}")) {
+        if (GITHUB_API_URL.contains("pjm6569")) {
             Log.e(TAG, "GitHub API URL을 설정하세요. (MainActivity.java)");
             return;
         }
